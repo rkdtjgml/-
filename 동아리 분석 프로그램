@@ -1,0 +1,79 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# CSV 파일을 업로드해서 불러오기 (Replit은 직접 업로드 필요)
+from google.colab import files
+uploaded = files.upload()
+
+# 파일 불러오기 (파일명 바꿔서 쓰기)
+cybercrime_total = pd.read_csv('경찰청_연도별 사이버 범죄 통계 현황_20200831.csv', encoding='cp949')
+cybercrime_G = pd.read_csv('경찰청 강원특별자치도경찰청_정보통신망 이용범죄 현황_20231230.csv', encoding='cp949')
+cybercrime_J = pd.read_csv('경찰청 전라북도경찰청_정보통신망 이용범죄 현황_20231231.csv', encoding='cp949')
+
+# 전처리
+cybercrime_total = cybercrime_total[cybercrime_total['구분'] == '발생건수'].drop(columns='구분')
+cybercrime_G.rename(columns={'연도': '년도'}, inplace=True)
+cybercrime_J['년도'] = pd.to_numeric(cybercrime_J['년도'], errors='coerce')
+cybercrime_J = cybercrime_J.dropna(subset=['년도'])
+
+def convert_numeric(df):
+    for col in df.columns:
+        if col not in ['년도', '유형']:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+
+cybercrime_total = convert_numeric(cybercrime_total)
+cybercrime_G = convert_numeric(cybercrime_G)
+cybercrime_J = convert_numeric(cybercrime_J)
+
+# 분석용 데이터 구성
+cols_national = ['연도', '사이버 도박(기타)', '사이버 음란물(일반음란물)', '사이버 명예훼손(모욕)', '해킹(계정도용)']
+df_national_trend = cybercrime_total[cols_national].set_index('연도')
+
+cybercrime_G_filtered = cybercrime_G[cybercrime_G['년도'].isin([2021, 2022, 2023])].set_index('년도')
+cybercrime_J_occurrence = cybercrime_J[cybercrime_J['유형'] == '발생'].set_index('년도')
+cybercrime_J_occurrence = cybercrime_J_occurrence.rename(columns={
+    '인터넷 사기': '사이버 사기',
+    '사이버 금융범죄': '사이버 금융범죄',
+    '개인위치 정보침해': '개인위치 정보침해',
+    '사이버 저작권침해': '사이버 저작권침해',
+    '기타': '기타'
+})
+
+common_cols = ['사이버 사기', '사이버 금융범죄', '개인위치 정보침해', '사이버 저작권침해', '기타']
+
+compare_df = pd.DataFrame({
+    '강원도_' + col: cybercrime_G_filtered[col] for col in common_cols
+})
+for col in common_cols:
+    compare_df['전북_' + col] = cybercrime_J_occurrence[col]
+compare_df = compare_df.sort_index()
+
+# 시각화 1: 전국 추이
+plt.figure(figsize=(10, 6))
+for col in df_national_trend.columns:
+    plt.plot(df_national_trend.index, df_national_trend[col], marker='o', label=col)
+plt.title('전국 주요 사이버 범죄 유형별 발생 추이 (2016~2020)')
+plt.xlabel('연도')
+plt.ylabel('발생 건수')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 시각화 2: 지역 비교
+fig, axs = plt.subplots(3, 2, figsize=(12, 10))
+axs = axs.flatten()
+for idx, col in enumerate(common_cols):
+    ax = axs[idx]
+    ax.plot(compare_df.index, compare_df[f'강원도_{col}'], marker='o', label='강원도')
+    ax.plot(compare_df.index, compare_df[f'전북_{col}'], marker='s', label='전북')
+    ax.set_title(col)
+    ax.set_xlabel('년도')
+    ax.set_ylabel('발생 건수')
+    ax.grid(True)
+    ax.legend()
+fig.delaxes(axs[-1])
+fig.suptitle('강원도 vs 전라북도 사이버 범죄 발생 비교 (2021~2023)', fontsize=14)
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
